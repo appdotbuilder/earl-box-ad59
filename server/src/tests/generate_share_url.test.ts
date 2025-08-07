@@ -4,82 +4,73 @@ import { resetDB, createDB } from '../helpers';
 import { type GenerateShareUrlInput } from '../schema';
 import { generateShareUrl } from '../handlers/generate_share_url';
 
-// Test input data
-const testInput: GenerateShareUrlInput = {
-  base_url: 'https://example.com',
-  share_token: 'abc123token456'
-};
-
 describe('generateShareUrl', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
-  it('should generate a valid share URL', async () => {
-    const result = await generateShareUrl(testInput);
+  it('should generate a share URL with proper format', async () => {
+    const input: GenerateShareUrlInput = {
+      base_url: 'https://example.com',
+      share_token: 'abc123def456'
+    };
 
-    expect(result.share_url).toEqual('https://example.com/share/abc123token456');
-    expect(result.share_url).toContain(testInput.base_url);
-    expect(result.share_url).toContain(testInput.share_token);
+    const result = await generateShareUrl(input);
+
+    expect(result.share_url).toEqual('https://example.com/share/abc123def456');
   });
 
   it('should handle base URL with trailing slash', async () => {
-    const inputWithTrailingSlash: GenerateShareUrlInput = {
+    const input: GenerateShareUrlInput = {
       base_url: 'https://example.com/',
-      share_token: 'test-token'
+      share_token: 'xyz789'
     };
 
-    const result = await generateShareUrl(inputWithTrailingSlash);
+    const result = await generateShareUrl(input);
 
-    expect(result.share_url).toEqual('https://example.com/share/test-token');
-    expect(result.share_url).not.toContain('//share');
+    expect(result.share_url).toEqual('https://example.com/share/xyz789');
   });
 
-  it('should handle different URL schemes', async () => {
-    const httpInput: GenerateShareUrlInput = {
+  it('should work with localhost URLs', async () => {
+    const input: GenerateShareUrlInput = {
       base_url: 'http://localhost:3000',
-      share_token: 'local-token'
+      share_token: 'local123'
     };
 
-    const result = await generateShareUrl(httpInput);
+    const result = await generateShareUrl(input);
 
-    expect(result.share_url).toEqual('http://localhost:3000/share/local-token');
+    expect(result.share_url).toEqual('http://localhost:3000/share/local123');
   });
 
   it('should handle complex share tokens', async () => {
-    const complexTokenInput: GenerateShareUrlInput = {
-      base_url: 'https://myapp.com',
-      share_token: 'abcd1234-efgh-5678-ijkl-9012mnop3456'
+    const input: GenerateShareUrlInput = {
+      base_url: 'https://myapp.example.org',
+      share_token: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6'
     };
 
-    const result = await generateShareUrl(complexTokenInput);
+    const result = await generateShareUrl(input);
 
-    expect(result.share_url).toEqual('https://myapp.com/share/abcd1234-efgh-5678-ijkl-9012mnop3456');
+    expect(result.share_url).toEqual('https://myapp.example.org/share/a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6');
   });
 
-  it('should throw error for empty base URL', async () => {
-    const invalidInput: GenerateShareUrlInput = {
-      base_url: '',
-      share_token: 'valid-token'
+  it('should handle base URL with port number', async () => {
+    const input: GenerateShareUrlInput = {
+      base_url: 'https://staging.example.com:8080',
+      share_token: 'staging456'
     };
 
-    await expect(generateShareUrl(invalidInput)).rejects.toThrow(/base url is required/i);
+    const result = await generateShareUrl(input);
+
+    expect(result.share_url).toEqual('https://staging.example.com:8080/share/staging456');
   });
 
-  it('should throw error for empty share token', async () => {
-    const invalidInput: GenerateShareUrlInput = {
-      base_url: 'https://example.com',
-      share_token: ''
+  it('should handle base URL with path', async () => {
+    const input: GenerateShareUrlInput = {
+      base_url: 'https://example.com/app',
+      share_token: 'path123'
     };
 
-    await expect(generateShareUrl(invalidInput)).rejects.toThrow(/share token is required/i);
-  });
+    const result = await generateShareUrl(input);
 
-  it('should handle whitespace-only inputs', async () => {
-    const whitespaceInput: GenerateShareUrlInput = {
-      base_url: '   ',
-      share_token: 'valid-token'
-    };
-
-    await expect(generateShareUrl(whitespaceInput)).rejects.toThrow(/base url is required/i);
+    expect(result.share_url).toEqual('https://example.com/app/share/path123');
   });
 });

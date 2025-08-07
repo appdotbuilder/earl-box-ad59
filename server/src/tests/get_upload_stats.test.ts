@@ -3,85 +3,94 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
 import { db } from '../db';
 import { filesTable } from '../db/schema';
-import { type UploadFileInput } from '../schema';
 import { getUploadStats } from '../handlers/get_upload_stats';
-
-// Test file data
-const testFile1: Omit<UploadFileInput, 'share_token'> = {
-  filename: 'test1.jpg',
-  original_name: 'Test Image 1.jpg',
-  file_path: '/uploads/test1.jpg',
-  file_size: 1024000, // 1MB
-  mime_type: 'image/jpeg'
-};
-
-const testFile2: Omit<UploadFileInput, 'share_token'> = {
-  filename: 'test2.mp4',
-  original_name: 'Test Video.mp4',
-  file_path: '/uploads/test2.mp4',
-  file_size: 5242880, // 5MB
-  mime_type: 'video/mp4'
-};
 
 describe('getUploadStats', () => {
   beforeEach(createDB);
   afterEach(resetDB);
 
   it('should return zero stats when no files exist', async () => {
-    const stats = await getUploadStats();
+    const result = await getUploadStats();
 
-    expect(stats.total_uploads).toEqual(0);
-    expect(stats.total_size).toEqual(0);
+    expect(result.total_uploads).toEqual(0);
+    expect(result.total_size).toEqual(0);
   });
 
   it('should return correct stats for single file', async () => {
-    // Insert test file
-    await db.insert(filesTable).values({
-      ...testFile1,
-      share_token: 'test-token-1'
-    }).execute();
+    // Insert a test file
+    await db.insert(filesTable)
+      .values({
+        filename: 'test1.jpg',
+        original_name: 'test1.jpg',
+        file_path: '/uploads/test1.jpg',
+        file_size: 1024,
+        mime_type: 'image/jpeg',
+        share_token: 'token123'
+      })
+      .execute();
 
-    const stats = await getUploadStats();
+    const result = await getUploadStats();
 
-    expect(stats.total_uploads).toEqual(1);
-    expect(stats.total_size).toEqual(1024000);
+    expect(result.total_uploads).toEqual(1);
+    expect(result.total_size).toEqual(1024);
   });
 
   it('should return correct stats for multiple files', async () => {
     // Insert multiple test files
-    await db.insert(filesTable).values([
-      {
-        ...testFile1,
-        share_token: 'test-token-1'
-      },
-      {
-        ...testFile2,
-        share_token: 'test-token-2'
-      }
-    ]).execute();
+    await db.insert(filesTable)
+      .values([
+        {
+          filename: 'test1.jpg',
+          original_name: 'test1.jpg',
+          file_path: '/uploads/test1.jpg',
+          file_size: 1024,
+          mime_type: 'image/jpeg',
+          share_token: 'token123'
+        },
+        {
+          filename: 'test2.mp4',
+          original_name: 'test2.mp4',
+          file_path: '/uploads/test2.mp4',
+          file_size: 2048,
+          mime_type: 'video/mp4',
+          share_token: 'token456'
+        },
+        {
+          filename: 'test3.png',
+          original_name: 'test3.png',
+          file_path: '/uploads/test3.png',
+          file_size: 512,
+          mime_type: 'image/png',
+          share_token: 'token789'
+        }
+      ])
+      .execute();
 
-    const stats = await getUploadStats();
+    const result = await getUploadStats();
 
-    expect(stats.total_uploads).toEqual(2);
-    expect(stats.total_size).toEqual(1024000 + 5242880); // Sum of both file sizes
+    expect(result.total_uploads).toEqual(3);
+    expect(result.total_size).toEqual(3584); // 1024 + 2048 + 512
   });
 
   it('should handle large file sizes correctly', async () => {
-    const largeFile = {
-      filename: 'large.mp4',
-      original_name: 'Large Video.mp4',
-      file_path: '/uploads/large.mp4',
-      file_size: 100 * 1024 * 1024, // 100MB
-      mime_type: 'video/mp4',
-      share_token: 'large-token'
-    };
+    // Insert file with large size (approaching bigint range)
+    const largeSize = 100 * 1024 * 1024; // 100MB
+    
+    await db.insert(filesTable)
+      .values({
+        filename: 'large_video.mp4',
+        original_name: 'large_video.mp4',
+        file_path: '/uploads/large_video.mp4',
+        file_size: largeSize,
+        mime_type: 'video/mp4',
+        share_token: 'large_token'
+      })
+      .execute();
 
-    await db.insert(filesTable).values(largeFile).execute();
+    const result = await getUploadStats();
 
-    const stats = await getUploadStats();
-
-    expect(stats.total_uploads).toEqual(1);
-    expect(stats.total_size).toEqual(100 * 1024 * 1024);
-    expect(typeof stats.total_size).toBe('number');
+    expect(result.total_uploads).toEqual(1);
+    expect(result.total_size).toEqual(largeSize);
+    expect(typeof result.total_size).toEqual('number');
   });
 });

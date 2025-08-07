@@ -3,17 +3,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { resetDB, createDB } from '../helpers';
 import { db } from '../db';
 import { filesTable } from '../db/schema';
-import { type GetFileByTokenInput, type UploadFileInput } from '../schema';
+import { type GetFileByTokenInput } from '../schema';
 import { getFileByToken } from '../handlers/get_file_by_token';
+import { eq } from 'drizzle-orm';
 
 // Test file data
-const testFileData: UploadFileInput = {
+const testFileData = {
   filename: 'test-image.jpg',
   original_name: 'My Test Image.jpg',
   file_path: '/uploads/test-image.jpg',
   file_size: 1024000, // 1MB
   mime_type: 'image/jpeg',
-  share_token: 'test-token-123456789'
+  share_token: 'abc123def456ghi789'
 };
 
 describe('getFileByToken', () => {
@@ -21,37 +22,43 @@ describe('getFileByToken', () => {
   afterEach(resetDB);
 
   it('should return file record when token exists', async () => {
-    // Insert test file
+    // Create test file
     const insertResult = await db.insert(filesTable)
       .values(testFileData)
       .returning()
       .execute();
+    
+    const createdFile = insertResult[0];
 
-    const insertedFile = insertResult[0];
-
-    // Test the handler
+    // Test retrieval by token
     const input: GetFileByTokenInput = {
-      share_token: testFileData.share_token
+      share_token: 'abc123def456ghi789'
     };
 
     const result = await getFileByToken(input);
 
-    // Verify result matches inserted file
     expect(result).not.toBeNull();
-    expect(result!.id).toEqual(insertedFile.id);
+    expect(result!.id).toEqual(createdFile.id);
     expect(result!.filename).toEqual('test-image.jpg');
     expect(result!.original_name).toEqual('My Test Image.jpg');
     expect(result!.file_path).toEqual('/uploads/test-image.jpg');
     expect(result!.file_size).toEqual(1024000);
     expect(result!.mime_type).toEqual('image/jpeg');
-    expect(result!.share_token).toEqual('test-token-123456789');
+    expect(result!.share_token).toEqual('abc123def456ghi789');
     expect(result!.created_at).toBeInstanceOf(Date);
+    expect(typeof result!.file_size).toEqual('number');
   });
 
   it('should return null when token does not exist', async () => {
-    // Test with non-existent token
+    // Create test file with different token
+    await db.insert(filesTable)
+      .values(testFileData)
+      .returning()
+      .execute();
+
+    // Test retrieval with non-existent token
     const input: GetFileByTokenInput = {
-      share_token: 'non-existent-token'
+      share_token: 'nonexistent-token'
     };
 
     const result = await getFileByToken(input);
@@ -59,58 +66,61 @@ describe('getFileByToken', () => {
     expect(result).toBeNull();
   });
 
-  it('should handle different file types correctly', async () => {
-    // Insert video file
-    const videoFileData = {
-      ...testFileData,
-      filename: 'test-video.mp4',
-      original_name: 'My Test Video.mp4',
-      file_path: '/uploads/test-video.mp4',
-      file_size: 50000000, // 50MB
-      mime_type: 'video/mp4',
-      share_token: 'video-token-987654321'
-    };
-
-    await db.insert(filesTable)
-      .values(videoFileData)
-      .returning()
-      .execute();
-
-    // Test retrieval
+  it('should return null when no files exist in database', async () => {
+    // Test retrieval with empty database
     const input: GetFileByTokenInput = {
-      share_token: 'video-token-987654321'
+      share_token: 'any-token'
     };
 
     const result = await getFileByToken(input);
 
-    expect(result).not.toBeNull();
-    expect(result!.filename).toEqual('test-video.mp4');
-    expect(result!.mime_type).toEqual('video/mp4');
-    expect(result!.file_size).toEqual(50000000);
-    expect(typeof result!.file_size).toEqual('number');
+    expect(result).toBeNull();
   });
 
-  it('should handle large file sizes correctly', async () => {
-    // Test with maximum allowed file size
-    const largeFileData = {
-      ...testFileData,
-      file_size: 200 * 1024 * 1024, // 200MB max
-      share_token: 'large-file-token'
-    };
-
+  it('should match exact token only', async () => {
+    // Create test file
     await db.insert(filesTable)
-      .values(largeFileData)
+      .values(testFileData)
       .returning()
       .execute();
 
-    const input: GetFileByTokenInput = {
-      share_token: 'large-file-token'
+    // Test with partial token (should not match)
+    const partialTokenInput: GetFileByTokenInput = {
+      share_token: 'abc123' // Only part of the token
     };
 
-    const result = await getFileByToken(input);
+    const partialResult = await getFileByToken(partialTokenInput);
+    expect(partialResult).toBeNull();
 
-    expect(result).not.toBeNull();
-    expect(result!.file_size).toEqual(200 * 1024 * 1024);
-    expect(typeof result!.file_size).toEqual('number');
+    // Test with exact token (should match)
+    const exactTokenInput: GetFileByTokenInput = {
+      share_token: 'abc123def456ghi789'
+    };
+
+    const exactResult = await getFileByToken(exactTokenInput);
+    expect(exactResult).not.toBeNull();
+    expect(exactResult!.share_token).toEqual('abc123def456ghi789');
+  });
+
+  it('should verify file is saved correctly in database', async () => {
+    // Create test file
+    const insertResult = await db.insert(filesTable)
+      .values(testFileData)
+      .returning()
+      .execute();
+    
+    const createdFile = insertResult[0];
+
+    // Verify file exists in database with correct token
+    const savedFiles = await db.select()
+      .from(filesTable)
+      .where(eq(filesTable.id, createdFile.id))
+      .execute();
+
+    expect(savedFiles).toHaveLength(1);
+    expect(savedFiles[0].share_token).toEqual('abc123def456ghi789');
+    expect(savedFiles[0].filename).toEqual('test-image.jpg');
+    expect(savedFiles[0].file_size).toEqual(1024000);
+    expect(savedFiles[0].created_at).toBeInstanceOf(Date);
   });
 });

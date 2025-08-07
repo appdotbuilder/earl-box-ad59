@@ -18,8 +18,7 @@ export const uploadFile = async (input: UploadFileInput): Promise<FileRecord> =>
       .returning()
       .execute();
 
-    const fileRecord = result[0];
-    return fileRecord;
+    return result[0];
   } catch (error) {
     console.error('File upload failed:', error);
     throw error;

@@ -10,6 +10,7 @@ export const getFileByToken = async (input: GetFileByTokenInput): Promise<FileRe
     const results = await db.select()
       .from(filesTable)
       .where(eq(filesTable.share_token, input.share_token))
+      .limit(1)
       .execute();
 
     // Return file record if found, null if not found
@@ -18,17 +19,9 @@ export const getFileByToken = async (input: GetFileByTokenInput): Promise<FileRe
     }
 
     const file = results[0];
-    
-    // Return the file record with proper type conversion
     return {
-      id: file.id,
-      filename: file.filename,
-      original_name: file.original_name,
-      file_path: file.file_path,
-      file_size: file.file_size, // bigint mode: 'number' handles conversion
-      mime_type: file.mime_type,
-      share_token: file.share_token,
-      created_at: file.created_at
+      ...file,
+      file_size: file.file_size // bigint mode: 'number' already returns number
     };
   } catch (error) {
     console.error('Get file by token failed:', error);
